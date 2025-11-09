@@ -8,6 +8,8 @@
 #include <string>
 
 #include "financial/facades.hpp"
+#include "financial/importers.hpp"
+#include "financial/repository.hpp"
 
 namespace financial {
 
@@ -81,6 +83,28 @@ public:
 
 private:
     AnalyticsFacade& analytics_;
+    std::ostream& output_;
+};
+
+class ImportDataCommand : public ICommand {
+public:
+    ImportDataCommand(DataImporter& importer,
+                      std::string path,
+                      DomainFactory& factory,
+                      IRepository<BankAccount>& accountRepository,
+                      IRepository<Category>& categoryRepository,
+                      IOperationRepository& operationRepository,
+                      std::ostream& output);
+
+    void execute() override;
+
+private:
+    DataImporter& importer_;
+    std::string path_;
+    DomainFactory& factory_;
+    IRepository<BankAccount>& accountRepository_;
+    IRepository<Category>& categoryRepository_;
+    IOperationRepository& operationRepository_;
     std::ostream& output_;
 };
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <fstream>
+#include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -55,5 +56,7 @@ class YamlDataImporter : public DataImporter {
 protected:
     ImportResult parseContent(const std::string& content, DomainFactory& factory) override;
 };
+
+std::unique_ptr<DataImporter> createImporterForExtension(const std::string& path);
 
 }  // namespace financial

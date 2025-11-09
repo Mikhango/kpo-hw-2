@@ -1,5 +1,6 @@
 #include "financial/importers.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <iomanip>
 #include <sstream>
@@ -383,6 +384,29 @@ ImportResult YamlDataImporter::parseContent(const std::string& content, DomainFa
     flush();
 
     return result;
+}
+
+std::unique_ptr<DataImporter> createImporterForExtension(const std::string& path) {
+    auto dot = path.find_last_of('.');
+    if (dot == std::string::npos) {
+        throw std::invalid_argument("Import file must have an extension");
+    }
+    auto ext = path.substr(dot + 1);
+    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+
+    if (ext == "csv") {
+        return std::make_unique<CsvDataImporter>();
+    }
+    if (ext == "json") {
+        return std::make_unique<JsonDataImporter>();
+    }
+    if (ext == "yaml" || ext == "yml") {
+        return std::make_unique<YamlDataImporter>();
+    }
+
+    throw std::invalid_argument("Unsupported import format: " + ext);
 }
 
 }  // namespace financial

@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -17,6 +18,15 @@ namespace {
 void writeToFile(const std::string& path, const std::string& content) {
     std::ofstream file(path);
     file << content;
+}
+
+std::string trim(const std::string& value) {
+    auto begin = value.find_first_not_of(" \t\n\r");
+    if (begin == std::string::npos) {
+        return "";
+    }
+    auto end = value.find_last_not_of(" \t\n\r");
+    return value.substr(begin, end - begin + 1);
 }
 
 financial::Identifier findCategoryIdByName(const std::vector<financial::Category>& categories,
@@ -53,50 +63,79 @@ int main() {
 
     std::cout << "=== Financial Accounting Demo ===\n";
 
-    auto addIncomeCategory = std::make_unique<TimedCommandDecorator>(
-        std::make_unique<AddCategoryCommand>(categoryFacade, CategoryType::Income, "Salary", std::cout),
-        std::cout);
-    addIncomeCategory->execute();
+    std::cout << "Enter path to data file for import (csv/json/yaml) or leave blank to load sample data:\n> ";
+    std::string importPath;
+    if (!std::getline(std::cin, importPath)) {
+        importPath.clear();
+    }
+    importPath = trim(importPath);
 
-    auto addExpenseCategory = std::make_unique<TimedCommandDecorator>(
-        std::make_unique<AddCategoryCommand>(categoryFacade, CategoryType::Expense, "Cafe", std::cout),
-        std::cout);
-    addExpenseCategory->execute();
+    bool imported = false;
+    if (!importPath.empty()) {
+        try {
+            auto importer = createImporterForExtension(importPath);
+            auto importCommand = std::make_unique<ImportDataCommand>(*importer,
+                                                                     importPath,
+                                                                     factory,
+                                                                     accountRepository,
+                                                                     categoryRepository,
+                                                                     *operationRepository,
+                                                                     std::cout);
+            auto timedImport = std::make_unique<TimedCommandDecorator>(std::move(importCommand), std::cout);
+            timedImport->execute();
+            imported = true;
+        } catch (const std::exception& ex) {
+            std::cerr << "Failed to import data: " << ex.what() << "\n";
+            return 1;
+        }
+    }
 
-    auto addAccount = std::make_unique<TimedCommandDecorator>(
-        std::make_unique<AddAccountCommand>(accountFacade, "Main account", 0.0, std::cout), std::cout);
-    addAccount->execute();
+    if (!imported) {
+        auto addIncomeCategory = std::make_unique<TimedCommandDecorator>(
+            std::make_unique<AddCategoryCommand>(categoryFacade, CategoryType::Income, "Salary", std::cout),
+            std::cout);
+        addIncomeCategory->execute();
 
-    auto accounts = accountFacade.listAccounts();
-    auto categories = categoryFacade.listCategories();
+        auto addExpenseCategory = std::make_unique<TimedCommandDecorator>(
+            std::make_unique<AddCategoryCommand>(categoryFacade, CategoryType::Expense, "Cafe", std::cout),
+            std::cout);
+        addExpenseCategory->execute();
 
-    auto mainAccountId = accounts.front().id();
-    auto salaryCategoryId = findCategoryIdByName(categories, "Salary");
-    auto cafeCategoryId = findCategoryIdByName(categories, "Cafe");
+        auto addAccount = std::make_unique<TimedCommandDecorator>(
+            std::make_unique<AddAccountCommand>(accountFacade, "Main account", 0.0, std::cout), std::cout);
+        addAccount->execute();
 
-    auto addSalaryOperation = std::make_unique<TimedCommandDecorator>(
-        std::make_unique<AddOperationCommand>(operationFacade,
-                                              OperationType::Income,
-                                              mainAccountId,
-                                              2500.0,
-                                              std::chrono::system_clock::now(),
-                                              std::string("Monthly salary"),
-                                              salaryCategoryId,
-                                              std::cout),
-        std::cout);
-    addSalaryOperation->execute();
+        auto accounts = accountFacade.listAccounts();
+        auto categories = categoryFacade.listCategories();
 
-    auto addCafeExpense = std::make_unique<TimedCommandDecorator>(
-        std::make_unique<AddOperationCommand>(operationFacade,
-                                              OperationType::Expense,
-                                              mainAccountId,
-                                              150.0,
-                                              std::chrono::system_clock::now(),
-                                              std::string("Weekend brunch"),
-                                              cafeCategoryId,
-                                              std::cout),
-        std::cout);
-    addCafeExpense->execute();
+        auto mainAccountId = accounts.front().id();
+        auto salaryCategoryId = findCategoryIdByName(categories, "Salary");
+        auto cafeCategoryId = findCategoryIdByName(categories, "Cafe");
+
+        auto addSalaryOperation = std::make_unique<TimedCommandDecorator>(
+            std::make_unique<AddOperationCommand>(operationFacade,
+                                                  OperationType::Income,
+                                                  mainAccountId,
+                                                  2500.0,
+                                                  std::chrono::system_clock::now(),
+                                                  std::string("Monthly salary"),
+                                                  salaryCategoryId,
+                                                  std::cout),
+            std::cout);
+        addSalaryOperation->execute();
+
+        auto addCafeExpense = std::make_unique<TimedCommandDecorator>(
+            std::make_unique<AddOperationCommand>(operationFacade,
+                                                  OperationType::Expense,
+                                                  mainAccountId,
+                                                  150.0,
+                                                  std::chrono::system_clock::now(),
+                                                  std::string("Weekend brunch"),
+                                                  cafeCategoryId,
+                                                  std::cout),
+            std::cout);
+        addCafeExpense->execute();
+    }
 
     auto showAnalytics = std::make_unique<TimedCommandDecorator>(
         std::make_unique<ShowAnalyticsCommand>(analyticsFacade, std::cout), std::cout);
@@ -124,12 +163,6 @@ int main() {
     yamlExporter.exportCollection(categoryFacade.listCategories(), "categories");
     yamlExporter.exportCollection(operationFacade.listOperations(), "operations");
     writeToFile("data/financial_data.yaml", yamlExporter.buildOutput());
-
-    CsvDataImporter importer;
-    auto importResult = importer.importFile("data/financial_data.csv", factory);
-    std::cout << "Imported accounts: " << importResult.accounts.size() << "\n";
-    std::cout << "Imported categories: " << importResult.categories.size() << "\n";
-    std::cout << "Imported operations: " << importResult.operations.size() << "\n";
 
     std::cout << "Exported data saved to data/financial_data.* files.\n";
 

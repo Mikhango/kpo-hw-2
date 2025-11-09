@@ -79,4 +79,36 @@ void ShowAnalyticsCommand::execute() {
     }
 }
 
+ImportDataCommand::ImportDataCommand(DataImporter& importer,
+                                     std::string path,
+                                     DomainFactory& factory,
+                                     IRepository<BankAccount>& accountRepository,
+                                     IRepository<Category>& categoryRepository,
+                                     IOperationRepository& operationRepository,
+                                     std::ostream& output)
+    : importer_(importer),
+      path_(std::move(path)),
+      factory_(factory),
+      accountRepository_(accountRepository),
+      categoryRepository_(categoryRepository),
+      operationRepository_(operationRepository),
+      output_(output) {}
+
+void ImportDataCommand::execute() {
+    auto result = importer_.importFile(path_, factory_);
+
+    for (const auto& account : result.accounts) {
+        accountRepository_.add(account);
+    }
+    for (const auto& category : result.categories) {
+        categoryRepository_.add(category);
+    }
+    for (const auto& operation : result.operations) {
+        operationRepository_.add(operation);
+    }
+
+    output_ << "Imported " << result.accounts.size() << " accounts, " << result.categories.size()
+            << " categories and " << result.operations.size() << " operations from '" << path_ << "'\n";
+}
+
 }  // namespace financial
